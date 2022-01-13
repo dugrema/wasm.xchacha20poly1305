@@ -1,12 +1,10 @@
 # wasm.xchacha20poly1305
 WASM version of XChaCha20Poly1305 streaming in rust
 
-References implementation of XChaCha20Poly1305
-
 ## Description
 
 This is a simple WASM wrapper around the Rust crate chacha20poly1305. Currently the only algorithm
-exposed is the block streaming version of XChaCha20POly1305.
+exposed is the block streaming version of XChaCha20Poly1305.
 
 The blocksize is hard-coded to 256Kb (why? because it's a positive integer). All the auth tags are included in the
 stream. This means 16 bytes are added to the original stream for each block.
@@ -22,7 +20,7 @@ Github : https://github.com/dugrema/wasm.xchacha20poly1305
 
 Add to your project, for example using npm:
 
-`npm install @dugrema/wasm-crypto`
+`npm i @dugrema/wasm-xchacha20poly1305`
 
 Import it somewhere in your project. Must be done asynchronously (e.g. promise) 
 

@@ -1,10 +1,12 @@
 # Add to package.json
+"name": "@dugrema/wasm-xchacha20poly1305",
 "keywords": [
     "wasm",
     "xchacha20",
     "poly1305",
     "encryption",
     "aead"
-]
+],
+"license": "MIT",
 
 # npm publish --access public

@@ -1,6 +1,6 @@
 [package]
 name = "wasm-xchacha20poly1305"
-version = "0.1.1"
+version = "0.1.2"
 authors = ["Mathieu Dugre <mathieu.dugre@mdugre.info>"]
 edition = "2021"
 
