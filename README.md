@@ -26,7 +26,10 @@ Add to your project, for example using npm:
 
 Import it somewhere in your project. Must be done asynchronously (e.g. promise) 
 
-`import('@dugrema/wasm-crypto/dugrema_wasm_xchacha20poly1305.js').then(wasmcrypto=>{ ... do something with it ...})`
+```
+import('@dugrema/wasm-xchacha20poly1305/wasm_xchacha20poly1305.js')
+    .then( wasmcrypto => { ... do something with it ...} )
+```
 
 I'm using React with rescript to rewire support for WASM. Here is the howto I used to understand
 how to wire WASM in React : https://koala42.com/using-webassembly-in-your-reactjs-app/. Use this to get your magic
