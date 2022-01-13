@@ -1,0 +1,10 @@
+# Add to package.json
+"keywords": [
+    "wasm",
+    "xchacha20",
+    "poly1305",
+    "encryption",
+    "aead"
+]
+
+# npm publish --access public
