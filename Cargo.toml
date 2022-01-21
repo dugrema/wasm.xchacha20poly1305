@@ -1,6 +1,6 @@
 [package]
-name = "wasm-xchacha20poly1305"
-version = "0.1.2"
+name = "wasm-chacha20poly1305"
+version = "0.2.0"
 authors = ["Mathieu Dugre <mathieu.dugre@mdugre.info>"]
 edition = "2021"
 
@@ -17,7 +17,7 @@ wasm-bindgen = { version = "0.2.63", features = ["serde-serialize"] }
 wasm-bindgen-futures = "0.4.28"
 web-log = "1.0.0"
 
-chacha20poly1305 = { version= "0.9.0", features = ["stream"] }
+# chacha20poly1305 = { version= "0.9.0", features = ["stream"] }
 
 # The `console_error_panic_hook` crate provides better debugging of panics by
 # logging them with `console.error`. This is great for development, but requires
@@ -32,7 +32,14 @@ chacha20poly1305 = { version= "0.9.0", features = ["stream"] }
 # Unfortunately, `wee_alloc` requires nightly Rust when targeting wasm for now.
 # wee_alloc = { version = "0.4.5", optional = true }
 
+aead = { version = "0.4", default-features = false, features = ['alloc'] }
+chacha20 = { version = "0.8", features = ["zeroize"] }
+cipher = "0.3"
+poly1305 = "0.7"
+zeroize = { version = ">=1, <1.5", default-features = false }
+
 [dev-dependencies]
+aead = { version = "0.4", features = ["dev"], default-features = false }
 wasm-bindgen-test = "0.3.13"
 
 [profile.release]
