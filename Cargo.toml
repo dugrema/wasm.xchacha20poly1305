@@ -1,8 +1,13 @@
 [package]
-name = "wasm-chacha20poly1305"
+name = "wasm-xchacha20poly1305"
 version = "0.2.0"
 authors = ["Mathieu Dugre <mathieu.dugre@mdugre.info>"]
 edition = "2021"
+description = "WASM wrapper of the chacha20poly1305 library in rust"
+documentation = "https://github.com/dugrema/wasm.xchacha20poly1305"
+homepage = "https://github.com/dugrema/wasm.xchacha20poly1305"
+keywords = ["wasm", "chacha20", "xchacha20", "poly1305", "encryption", "aead"]
+license = "MIT"
 
 [lib]
 crate-type = ["cdylib", "rlib"]
