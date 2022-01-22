@@ -1,6 +1,6 @@
 use aead::generic_array::ArrayLength;
 use crate::chacha20poly1305_incremental::{AeadUpdate, ChaCha20Poly1305, ChaChaPoly1305, Nonce, Tag, XChaCha20Poly1305, XNonce};
-use aead::{NewAead, consts::{U0, U12, U16, U24, U32}};
+use aead::{NewAead, Aead, consts::{U0, U12, U16, U24, U32}};
 use cipher::{NewCipher, StreamCipher, StreamCipherSeek};
 use serde::{Serialize, Deserialize};
 use wasm_bindgen::JsValue;
@@ -17,6 +17,104 @@ struct ReadResult {
 #[derive(Serialize, Deserialize, Debug)]
 struct Buffer {
     data: Vec<u8>,
+}
+
+pub fn chacha20poly1305_encrypt(nonce: Vec<u8>, key: Vec<u8>, data: Vec<u8>) -> Result<JsValue, JsValue> {
+    let mut aead = ChaCha20Poly1305::new(key[..].into());
+    let ciphertext_tag = match aead.encrypt(nonce[..].into(), data.as_ref()) {
+        Ok(ct) => ct,
+        Err(e) => Err(format!("WASM chacha20poly1305_encrypt encrypt error {:?}", e))?
+    };
+
+    let result = match JsValue::from_serde(&ciphertext_tag[..]) {
+        Ok(r) => r,
+        Err(e) => Err(format!("WASM chacha20poly1305_encrypt serde error {:?}", e))?
+    };
+
+    Ok(result)
+}
+
+/**
+Decrypt in one-passe with ChaCha20Poly1305. The auth tag can be inline (in data) or provided
+separately.
+
+Returns an array with the decrypted bytes.
+
+Throws an Error if decryption fails.
+*/
+pub fn chacha20poly1305_decrypt(nonce: Vec<u8>, key: Vec<u8>, data: Vec<u8>, tag: Option<Vec<u8>>) -> Result<JsValue, JsValue> {
+    let mut aead = ChaCha20Poly1305::new(key[..].into());
+
+    let ciphertext = match tag {
+        Some(t) => {
+            let mut ciphertext = Vec::new();
+            ciphertext.extend_from_slice(&data[..]);
+            ciphertext.extend_from_slice(&t[..]);
+            ciphertext
+        },
+        None => data
+    };
+
+    let message = match aead.decrypt(nonce[..].into(), ciphertext.as_ref()) {
+        Ok(m) => m,
+        Err(e) => Err(format!("WASM chacha20poly1305_decrypt encrypt error {:?}", e))?
+    };
+
+    let result = match JsValue::from_serde(&message[..]) {
+        Ok(r) => r,
+        Err(e) => Err(format!("WASM chacha20poly1305_decrypt serde error {:?}", e))?
+    };
+
+    Ok(result)
+}
+
+pub fn xchacha20poly1305_encrypt(nonce: Vec<u8>, key: Vec<u8>, data: Vec<u8>) -> Result<JsValue, JsValue> {
+    let mut aead = XChaCha20Poly1305::new(key[..].into());
+    let ciphertext_tag = match aead.encrypt(nonce[..].into(), data.as_ref()) {
+        Ok(ct) => ct,
+        Err(e) => Err(format!("WASM xchacha20poly1305_encrypt encrypt error {:?}", e))?
+    };
+
+    let result = match JsValue::from_serde(&ciphertext_tag[..]) {
+        Ok(r) => r,
+        Err(e) => Err(format!("WASM xchacha20poly1305_encrypt serde error {:?}", e))?
+    };
+
+    Ok(result)
+}
+
+/**
+Decrypt in one-pass with XChaCha20Poly1305. The auth tag can be inline (in data) or provided
+separately.
+
+Returns an array with the decrypted bytes.
+
+Throws an Error if decryption fails.
+*/
+pub fn xchacha20poly1305_decrypt(nonce: Vec<u8>, key: Vec<u8>, data: Vec<u8>, tag: Option<Vec<u8>>) -> Result<JsValue, JsValue> {
+    let mut aead = XChaCha20Poly1305::new(key[..].into());
+
+    let ciphertext = match tag {
+        Some(t) => {
+            let mut ciphertext = Vec::new();
+            ciphertext.extend_from_slice(&data[..]);
+            ciphertext.extend_from_slice(&t[..]);
+            ciphertext
+        },
+        None => data
+    };
+
+    let message = match aead.decrypt(nonce[..].into(), ciphertext.as_ref()) {
+        Ok(m) => m,
+        Err(e) => Err(format!("WASM xchacha20poly1305_decrypt encrypt error {:?}", e))?
+    };
+
+    let result = match JsValue::from_serde(&message[..]) {
+        Ok(r) => r,
+        Err(e) => Err(format!("WASM xchacha20poly1305_decrypt serde error {:?}", e))?
+    };
+
+    Ok(result)
 }
 
 /**

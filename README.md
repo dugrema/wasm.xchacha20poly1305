@@ -1,13 +1,15 @@
 # wasm.xchacha20poly1305
-WASM version of XChaCha20Poly1305 streaming in rust
+WASM version of ChaCha20Poly1305 and XChaCha20Poly1305 in rust
 
 ## Description
 
-This is a simple WASM wrapper around the Rust crate chacha20poly1305. Currently the only algorithm
-exposed is the block streaming version of XChaCha20Poly1305.
+This is a WASM wrapper around some operations in the Rust crate chacha20poly1305. 
 
-The blocksize is hard-coded to 256Kb (why? because it's a positive integer). All the auth tags are included in the
-stream. This means 16 bytes are added to the original stream for each block.
+The "one-pass" encrypt/decrypt functions use the original algorithm from the Rust crate chacha20poly1305.
+
+I have modified the ciphers to support incremental processing (calling ..._update() then ..._finalize()) to 
+support encrypting large files that don't fit in memory. These are the _stream functions available in this wrapper.
+This incurs a performance cost when compared to the one-pass version but should allow processing files up to 256 GB.
 
 ## References
 
@@ -35,19 +37,58 @@ bytes in line.
 
 # Usage
 
-* `xchacha20poly1305_encrypt_stream(nonce, key, readStream, outputStream)`
-* `xchacha20poly1305_decrypt_stream(nonce, key, readStream, outputStream)`
+## One-pass: faster, all in memory
+
+* `chacha20poly1305_encrypt(nonce, key, data) -> Array with ciphertext + 16 byte auth tag`
+* `chacha20poly1305_decrypt(nonce, key, data, tag) -> Array with deciphered content`
+* `xchacha20poly1305_encrypt(nonce, key, data) -> Array with ciphertext + 16 byte auth tag`
+* `xchacha20poly1305_decrypt(nonce, key, data, tag) -> Array with deciphered content`
+
+Parameters
+
+* nonce : Uint8Array, 12 bytes for ChaCha20Poly1305 or 24 bytes for XChaCha20Poly1305
+* key : Uint8Array, 32 bytes
+* data : Uint8Array with data to process.
+* tag : 16 byte Array, optional. If not provided, the auth tag *MUST* be in the last 16 bytes of the data parameter.
+
+## Incremental: supports files up to 256 GB from streams
+
+* `chacha20poly1305_encrypt_stream(nonce, key, data)`
+* `chacha20poly1305_decrypt_stream(nonce, key, tag, readStream, outputStream)`
+* `xchacha20poly1305_encrypt_stream(nonce, key, readStream, outputStream) -> Array with 16 byte auth tag`
+* `xchacha20poly1305_decrypt_stream(nonce, key, tag, readStream, outputStream) `
 
 Values
 
-* nonce : Uint8Array
-* key : Uint8Array
+* nonce : Uint8Array, 12 bytes for ChaCha20Poly1305 or 24 bytes for XChaCha20Poly1305
+* key : Uint8Array, 32 bytes
 * readStream : object with async .read() that returns { done: bool, data: Uint8Array }. See readStream example below
 * outputStream : object with async .write(data). See outputStream example below.
+* tag : 16 byte Array
 
 ## Example
 
-Stream encryption
+One-pass encryption (no incremental processing) with chacha20poly1305
+```
+    // Prepare the 32 byte key, 12 byte nonce.
+    const key = Buffer.from('808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9f', 'hex')
+    const nonce = Buffer.from('404142434445464748494a4b', 'hex')  // Not secure, always use a new random nonce! 
+
+    // Prepare the data
+    const messageString = "Content to encrypt"
+    const encoder = new TextEncoder()
+    const messageBytes = encoder.encode(messageString)
+    
+    // Encrypt in a single pass
+    const ciphertextTag = await wasmcrypto.chacha20poly1305_encrypt(nonce, key, messageBytes)
+
+    // Note : ciphertextTag contains both the cipher and the 16 byte tag in a simple Array. 
+    //        here is how to extract them to a Buffer
+    const ciphertext = Buffer.from(ciphertextTag.slice(0, ciphertextTag.length-16))
+    const tag = Buffer.from(ciphertextTag.slice(ciphertextTag.length-16))
+```
+
+Stream encryption with xchacha20poly1305
 ```
 async function encrypt() {
     const key = Buffer.from('808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9f', 'hex');
@@ -56,7 +97,8 @@ async function encrypt() {
     const readStream = ... object with async .read() that returns { done: bool, data: Uint8Array }
     const outputStream = ... object with async .write(data) ...
     
-    await wasmcrypto.xchacha20poly1305_encrypt_stream(nonce, key, readStream, outputStream)
+    const tag = await wasmcrypto.xchacha20poly1305_encrypt_stream(nonce, key, readstream, output)
+    // Note: the tag is an Array, you can convert it to a Buffer with : Buffer.from(tag) 
 }
 ```
 
@@ -65,11 +107,12 @@ Stream decryption
 async function decrypt() {
     const key = Buffer.from('808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9f', 'hex');
     const nonce = Buffer.from('404142434445464748494a4b4c4d4e4f505152', 'hex');
-    
+
+    const tag = ... your tag from the encryption result ... 
     const readStream = ... object with async .read() that returns { done: bool, data: Uint8Array } ...
     const outputStream = ... object with async .write(data) ...
     
-    await wasmcrypto.xchacha20poly1305_decrypt_stream(nonce, key, readStream, outputStream)
+    await wasmcrypto.xchacha20poly1305_decrypt_stream(nonce, key, tag, readStream, outputStream)
 }
 ```
 
