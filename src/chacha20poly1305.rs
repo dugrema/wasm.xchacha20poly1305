@@ -1,5 +1,7 @@
-use crate::chacha20poly1305_incremental::{AeadUpdate, ChaCha20Poly1305, Nonce, Tag, XChaCha20Poly1305};
-use aead::NewAead;
+use aead::generic_array::ArrayLength;
+use crate::chacha20poly1305_incremental::{AeadUpdate, ChaCha20Poly1305, ChaChaPoly1305, Nonce, Tag, XChaCha20Poly1305, XNonce};
+use aead::{NewAead, consts::{U0, U12, U16, U24, U32}};
+use cipher::{NewCipher, StreamCipher, StreamCipherSeek};
 use serde::{Serialize, Deserialize};
 use wasm_bindgen::JsValue;
 use web_log;
@@ -17,30 +19,82 @@ struct Buffer {
     data: Vec<u8>,
 }
 
-// Arbitrarily setting chunk size to 256Kb.
-// This will add a 16 bytes poly1305 auth tag to each 256Kb block in the encrypted stream. The
-// final auth tag is in the last block (which may be less than 256Kb).
+/**
+Encrypts a stream with chacha20poly1305
 
+returns: tag buffer
+*/
 pub async fn chacha20poly1305_encrypt_stream(nonce: Vec<u8>, key: Vec<u8>, stream: ReadStream, output: OutputStream)
-    -> Result<(), JsValue>
+    -> Result<JsValue, JsValue>
 {
     // web_log::println!("encrypt_stream with nonce: {:?}", nonce);
 
     let mut aead: ChaCha20Poly1305 = ChaCha20Poly1305::new(key[..].into());
     aead.set_nonce(Nonce::from_slice(&nonce[..]));
 
-    // State
-    let mut done = false;
+    encrypt_stream(stream, output, aead).await
+}
 
+/**
+Decrypts a stream with chacha20poly1305.
+*/
+pub async fn chacha20poly1305_decrypt_stream(nonce: Vec<u8>, key: Vec<u8>, tag: Vec<u8>, stream: ReadStream, output: OutputStream)
+    -> Result<(), JsValue>
+{
+    // web_log::println!("decrypt_stream with nonce: {:?}", nonce);
+
+    let mut aead: ChaCha20Poly1305 = ChaCha20Poly1305::new(key[..].into());
+    aead.set_nonce(Nonce::from_slice(&nonce[..]));
+
+    decrypt_stream(&tag, stream, output, aead).await;
+
+    Ok(())
+}
+
+/**
+Encrypts a stream with chacha20poly1305
+
+returns: tag buffer
+*/
+pub async fn xchacha20poly1305_encrypt_stream(nonce: Vec<u8>, key: Vec<u8>, stream: ReadStream, output: OutputStream)
+    -> Result<JsValue, JsValue>
+{
+    // web_log::println!("encrypt_stream with nonce: {:?}", nonce);
+
+    let mut aead: XChaCha20Poly1305 = XChaCha20Poly1305::new(key[..].into());
+    aead.set_nonce(XNonce::from_slice(&nonce[..]));
+
+    encrypt_stream(stream, output, aead).await
+}
+
+/**
+Decrypts a stream with chacha20poly1305.
+*/
+pub async fn xchacha20poly1305_decrypt_stream(nonce: Vec<u8>, key: Vec<u8>, tag: Vec<u8>, stream: ReadStream, output: OutputStream)
+    -> Result<(), JsValue>
+{
+    // web_log::println!("decrypt_stream with nonce: {:?}", nonce);
+
+    let mut aead: XChaCha20Poly1305 = XChaCha20Poly1305::new(key[..].into());
+    aead.set_nonce(XNonce::from_slice(&nonce[..]));
+
+    decrypt_stream(&tag, stream, output, aead).await;
+
+    Ok(())
+}
+
+async fn encrypt_stream<C: NewCipher<KeySize = U32, NonceSize = N>+StreamCipher+StreamCipherSeek, N: ArrayLength<u8>>(stream: ReadStream, output: OutputStream, mut aead: ChaChaPoly1305<C, N>) -> Result<JsValue, JsValue> {
+    let mut done = false;
     while done == false {
         // Read next chunk from js ReadStream
         // JS error passthrough with ?
         let js_read_chunk = stream.read().await?;
+        // web_log::println!("encrypt_stream chunk: {:?}", js_read_chunk);
 
         // Deserialize into ReadResult to get {done, data}
         let mut read_chunk: ReadResult = match js_read_chunk.into_serde() {
             Ok(r) => r,
-            Err(e) => Err(format!("WASM js_read_chunk.into_serde error {:?}", e))?
+            Err(e) => Err(format!("WASM chacha20poly1305_encrypt_stream js_read_chunk.into_serde error {:?}", e))?
         };
 
         // Process
@@ -62,29 +116,26 @@ pub async fn chacha20poly1305_encrypt_stream(nonce: Vec<u8>, key: Vec<u8>, strea
     // Empty buffer into the last block
     let r = match aead.encrypt_finalize() {
         Ok(r) => r,
-        Err(e) => Err(format!("WASM encrypt_last error : {:?}", e))?
+        Err(e) => Err(format!("WASM chacha20poly1305_encrypt_stream error : {:?}", e))?
     };
-    output.write(&r[..]).await?;
+    // web_log::println!("encrypt_stream complete, ajout tag: {:?}", r);
 
-    Ok(())
+    let mut tag_vec = Vec::new();
+    tag_vec.extend_from_slice(&r[..]);
+
+    match JsValue::from_serde(&tag_vec[..]) {
+        Ok(r) => Ok(r),
+        Err(e) => Err(format!("WASM chacha20poly1305_encrypt_stream error response JsValue : {:?}", e))?
+    }
 }
 
-pub async fn chacha20poly1305_decrypt_stream(nonce: Vec<u8>, key: Vec<u8>, stream: ReadStream, output: OutputStream)
-    -> Result<(), JsValue>
-{
-    // web_log::println!("decrypt_stream with nonce: {:?}", nonce);
-
-    let mut aead: ChaCha20Poly1305 = ChaCha20Poly1305::new(key[..].into());
-    aead.set_nonce(Nonce::from_slice(&nonce[..]));
-
+async fn decrypt_stream<C: NewCipher<KeySize = U32, NonceSize = N>+StreamCipher+StreamCipherSeek, N: ArrayLength<u8>>(tag: &Vec<u8>, stream: ReadStream, output: OutputStream, mut aead: ChaChaPoly1305<C, N>) -> Result<(), JsValue> {
     let mut done = false;
-
-    let mut auth_tag = Vec::new();
     while done == false {
         let resultat = stream.read().await?;
         let mut read_result: ReadResult = match resultat.into_serde() {
             Ok(r) => r,
-            Err(e) => Err(format!("WASM decrypt js_read_chunk.into_serde error {:?}", e))?
+            Err(e) => Err(format!("WASM chacha20poly1305_decrypt_stream js_read_chunk.into_serde error {:?}", e))?
         };
 
         match read_result.done {
@@ -95,12 +146,6 @@ pub async fn chacha20poly1305_decrypt_stream(nonce: Vec<u8>, key: Vec<u8>, strea
                 match read_result.value {
                     Some(mut v) => {
                         aead.decrypt_update(v.data.as_mut_slice());
-                        let last_bytes = &v.data[..v.data.len()-16];
-                        auth_tag.extend_from_slice(last_bytes);
-                        if auth_tag.len() > 16 {
-                            // Cut to last 16 bytes
-                            auth_tag = auth_tag.split_off(auth_tag.len() - 16);
-                        }
                         output.write(&v.data[..]).await?;
                     },
                     None => done = true,
@@ -110,12 +155,12 @@ pub async fn chacha20poly1305_decrypt_stream(nonce: Vec<u8>, key: Vec<u8>, strea
     }
 
     // Empty buffer into the last block
-    let tag = Tag::from_slice(&auth_tag[..]);
-    match aead.decrypt_finalize(tag) {
-        Ok(r) => r,
-        Err(e) => Err(format!("WASM decrypt_last error : {:?}", e))?
+    let tag_inst = Tag::from_slice(&tag[..]);
+    // web_log::println!("decrypt_stream complete, tag : {:?}", tag_inst);
+    match aead.decrypt_finalize(tag_inst) {
+        Ok(_) => (),
+        Err(e) => Err(format!("WASM chacha20poly1305_decrypt_stream error : {:?}", e))?
     };
-    // output.write(&last_data[..]).await?;
 
     Ok(())
 }
