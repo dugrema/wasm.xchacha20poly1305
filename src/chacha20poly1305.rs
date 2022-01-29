@@ -11,7 +11,7 @@ use crate::{OutputStream, ReadStream};
 #[derive(Serialize, Deserialize, Debug)]
 struct ReadResult {
     done: bool,
-    value: Option<Buffer>,
+    value: Option<Vec<u8>>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -183,7 +183,7 @@ pub async fn xchacha20poly1305_decrypt_stream(nonce: Vec<u8>, key: Vec<u8>, tag:
 
 async fn encrypt_stream<C: NewCipher<KeySize = U32, NonceSize = N>+StreamCipher+StreamCipherSeek, N: ArrayLength<u8>>(stream: ReadStream, output: OutputStream, mut aead: ChaChaPoly1305<C, N>) -> Result<JsValue, JsValue> {
     let mut done = false;
-    while done == false {
+    while done != true {
         // Read next chunk from js ReadStream
         // JS error passthrough with ?
         let js_read_chunk = stream.read().await?;
@@ -195,6 +195,8 @@ async fn encrypt_stream<C: NewCipher<KeySize = U32, NonceSize = N>+StreamCipher+
             Err(e) => Err(format!("WASM chacha20poly1305_encrypt_stream js_read_chunk.into_serde error {:?}", e))?
         };
 
+        // web_log::println!("encrypt_stream data apres serde: {:?}", read_chunk);
+
         // Process
         match read_chunk.done {
             true => done = true,  // All data read
@@ -202,14 +204,19 @@ async fn encrypt_stream<C: NewCipher<KeySize = U32, NonceSize = N>+StreamCipher+
                 // Encrypt data
                 match read_chunk.value {
                     Some(mut v) => {
-                        aead.encrypt_update(v.data.as_mut_slice());
-                        output.write(&v.data[..]).await?;
+                        aead.encrypt_update(v.as_mut_slice());
+                        // web_log::println!("encrypt_stream output: {:?}", v);
+                        output.write(&v[..]).await?;
                     },
                     None => done = true,
                 }
             }
         }
     }
+
+    // Close outputstream
+    // web_log::println!("encrypt_stream close output");
+    output.close().await?;
 
     // Empty buffer into the last block
     let r = match aead.encrypt_finalize() {
@@ -243,14 +250,17 @@ async fn decrypt_stream<C: NewCipher<KeySize = U32, NonceSize = N>+StreamCipher+
             false => {
                 match read_result.value {
                     Some(mut v) => {
-                        aead.decrypt_update(v.data.as_mut_slice());
-                        output.write(&v.data[..]).await?;
+                        aead.decrypt_update(v.as_mut_slice());
+                        output.write(&v[..]).await?;
                     },
                     None => done = true,
                 }
             }
         }
     }
+
+    // Fermer output stream
+    output.close().await?;
 
     // Empty buffer into the last block
     let tag_inst = Tag::from_slice(&tag[..]);

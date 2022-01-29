@@ -38,6 +38,9 @@ extern "C" {
 
     #[wasm_bindgen(catch, method)]
     async fn write(this: &OutputStream, output: &[u8]) -> Result<JsValue, JsValue>;
+
+    #[wasm_bindgen(catch, method)]
+    async fn close(this: &OutputStream) -> Result<JsValue, JsValue>;
 }
 
 #[wasm_bindgen(catch)]
