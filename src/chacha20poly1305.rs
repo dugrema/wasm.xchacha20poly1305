@@ -20,6 +20,14 @@ struct Buffer {
 }
 
 pub fn chacha20poly1305_encrypt(nonce: Vec<u8>, key: Vec<u8>, data: Vec<u8>) -> Result<JsValue, JsValue> {
+
+    if key.len() != 32 {
+        Err(format!("chacha20poly1305_encrypt Key size invalid (len={} != 32)", key.len()))?;
+    }
+    if nonce.len() != 12 {
+        Err(format!("chacha20poly1305_encrypt Nonce size invalid (len={} != 12)", nonce.len()))?;
+    }
+
     let mut aead = ChaCha20Poly1305::new(key[..].into());
     let ciphertext_tag = match aead.encrypt(nonce[..].into(), data.as_ref()) {
         Ok(ct) => ct,
@@ -43,6 +51,15 @@ Returns an array with the decrypted bytes.
 Throws an Error if decryption fails.
 */
 pub fn chacha20poly1305_decrypt(nonce: Vec<u8>, key: Vec<u8>, data: Vec<u8>, tag: Option<Vec<u8>>) -> Result<JsValue, JsValue> {
+    // web_log::println!("chacha20poly1305_decrypt key {:?}, nonce: {:?}, data len : {}", key, nonce, data.len());
+
+    if key.len() != 32 {
+        Err(format!("chacha20poly1305_decrypt Key size invalid (len={} != 32)", key.len()))?;
+    }
+    if nonce.len() != 12 {
+        Err(format!("chacha20poly1305_decrypt Nonce size invalid (len={} != 12)", nonce.len()))?;
+    }
+
     let mut aead = ChaCha20Poly1305::new(key[..].into());
 
     let ciphertext = match tag {
@@ -55,15 +72,23 @@ pub fn chacha20poly1305_decrypt(nonce: Vec<u8>, key: Vec<u8>, data: Vec<u8>, tag
         None => data
     };
 
+    // web_log::println!("chacha20poly1305_decrypt ciphertext (len: {}): {:?}", ciphertext.len(), ciphertext);
+
     let message = match aead.decrypt(nonce[..].into(), ciphertext.as_ref()) {
         Ok(m) => m,
-        Err(e) => Err(format!("WASM chacha20poly1305_decrypt encrypt error {:?}", e))?
+        Err(e) => {
+            Err(format!("WASM chacha20poly1305_decrypt decryption invalid, error {:?}", e))?
+        }
     };
 
     let result = match JsValue::from_serde(&message[..]) {
         Ok(r) => r,
-        Err(e) => Err(format!("WASM chacha20poly1305_decrypt serde error {:?}", e))?
+        Err(e) => {
+            Err(format!("WASM chacha20poly1305_decrypt serde error {:?}", e))?
+        }
     };
+
+    // web_log::println!("chacha20poly1305_decrypt Resultat dechiffrage {:?}", result);
 
     Ok(result)
 }
@@ -126,6 +151,12 @@ pub async fn chacha20poly1305_encrypt_stream(nonce: Vec<u8>, key: Vec<u8>, strea
     -> Result<JsValue, JsValue>
 {
     // web_log::println!("encrypt_stream with nonce: {:?}", nonce);
+    if key.len() != 32 {
+        Err(format!("chacha20poly1305_encrypt_stream Key size invalid (len={} != 32)", key.len()))?;
+    }
+    if nonce.len() != 12 {
+        Err(format!("chacha20poly1305_encrypt_stream Nonce size invalid (len={} != 12)", nonce.len()))?;
+    }
 
     let mut aead: ChaCha20Poly1305 = ChaCha20Poly1305::new(key[..].into());
     aead.set_nonce(Nonce::from_slice(&nonce[..]));
@@ -140,6 +171,12 @@ pub async fn chacha20poly1305_decrypt_stream(nonce: Vec<u8>, key: Vec<u8>, tag: 
     -> Result<(), JsValue>
 {
     // web_log::println!("decrypt_stream with nonce: {:?}", nonce);
+    if key.len() != 32 {
+        Err(format!("chacha20poly1305_decrypt_stream Key size invalid (len={} != 32)", key.len()))?;
+    }
+    if nonce.len() != 12 {
+        Err(format!("chacha20poly1305_decrypt_stream Nonce size invalid (len={} != 12)", nonce.len()))?;
+    }
 
     let mut aead: ChaCha20Poly1305 = ChaCha20Poly1305::new(key[..].into());
     aead.set_nonce(Nonce::from_slice(&nonce[..]));
